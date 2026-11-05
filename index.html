@@ -1,0 +1,922 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive FMCW radar designer: tune parameters and see range, speed, SNR and detection update live.">
+<title>FMCW Radar Workbench</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: a settings sheet on the left (parameters), overview cards, plots and readout lists on the right. */
+:root{
+  --bg:#f5f5f7;--card:#ffffff;--fill:#f0f0f4;--segsel:#ffffff;--ink:#1d1d1f;--ink2:#6e6e73;--ink3:#8e8e93;--sep:rgba(60,60,67,.13);
+  --blue:#0071e3;--blue-soft:rgba(0,113,227,.10);--green:#1f7f35;--green-soft:rgba(52,199,89,.15);
+  --red:#d70015;--red-soft:rgba(255,59,48,.12);--orange:#a84c00;--orange-soft:rgba(255,149,0,.15);
+  --track:#dedee3;--glass:rgba(245,245,247,.80);--shadow:0 1px 2px rgba(0,0,0,.04),0 6px 22px rgba(0,0,0,.055);
+  --on-blue:#ffffff;
+  --f:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Helvetica Neue",system-ui,"Segoe UI",Roboto,sans-serif;
+  --fm:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#000000;--card:#1c1c1e;--fill:#2c2c2e;--segsel:#636366;--ink:#f5f5f7;--ink2:#a1a1a6;--ink3:#8e8e93;--sep:rgba(84,84,88,.55);
+  --blue:#2997ff;--blue-soft:rgba(41,151,255,.17);--green:#30d158;--green-soft:rgba(48,209,88,.17);
+  --red:#ff453a;--red-soft:rgba(255,69,58,.17);--orange:#ff9f0a;--orange-soft:rgba(255,159,10,.17);
+  --track:#3a3a3c;--glass:rgba(22,22,24,.74);--shadow:0 0 0 1px rgba(255,255,255,.04);--on-blue:#ffffff;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#000000;--card:#1c1c1e;--fill:#2c2c2e;--segsel:#636366;--ink:#f5f5f7;--ink2:#a1a1a6;--ink3:#8e8e93;--sep:rgba(84,84,88,.55);
+  --blue:#2997ff;--blue-soft:rgba(41,151,255,.17);--green:#30d158;--green-soft:rgba(48,209,88,.17);
+  --red:#ff453a;--red-soft:rgba(255,69,58,.17);--orange:#ff9f0a;--orange-soft:rgba(255,159,10,.17);
+  --track:#3a3a3c;--glass:rgba(22,22,24,.74);--shadow:0 0 0 1px rgba(255,255,255,.04);--on-blue:#ffffff;color-scheme:dark}
+
+html{color-scheme:light}
+[hidden]{display:none!important}
+img,svg{max-width:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f);font-size:15px;line-height:1.47;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:25;background:var(--bg)}
+:focus-visible{outline:3px solid var(--blue-soft);outline-offset:1px;box-shadow:0 0 0 1px var(--blue)}
+button{font-family:var(--f)}
+
+/* header */
+header.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--glass);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid var(--sep)}
+.bar-in{max-width:1400px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:10px;display:flex;align-items:center;justify-content:space-between;gap:8px 12px;flex-wrap:wrap}
+.bar h1{font-size:18px;font-weight:600;letter-spacing:-.01em;margin:0;line-height:1.2}
+.bar .sub{font-size:12px;color:var(--ink2)}
+.acts{display:flex;gap:8px;flex-wrap:wrap}
+.pbtn{border:0;background:var(--fill);color:var(--ink);font-size:13px;font-weight:500;padding:7px 14px;border-radius:999px;cursor:pointer}
+.pbtn:hover{filter:brightness(.96)}
+.pbtn.primary{background:var(--blue);color:var(--on-blue)}
+.pbtn.primary:hover{filter:brightness(1.08)}
+.acts{align-items:center}
+.theme{display:inline-flex;background:var(--fill);border-radius:999px;padding:2px;gap:2px}
+.theme button{border:0;background:transparent;color:var(--ink2);font-size:12.5px;font-weight:500;padding:5px 11px;border-radius:999px;cursor:pointer}
+.theme button[aria-checked="true"]{background:var(--segsel);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.14);font-weight:600}
+.strip{display:none}
+@media (max-width:900px){
+  .strip{display:flex;gap:6px;overflow-x:auto;width:100%;scrollbar-width:none;padding-bottom:2px}
+  .strip::-webkit-scrollbar{display:none}
+  .chip{flex:none;background:var(--card);border-radius:10px;padding:4px 10px;font-size:11px;color:var(--ink2);box-shadow:var(--shadow)}
+  .chip b{display:block;font-size:14px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+}
+
+/* page */
+.wrap{max-width:1400px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:26px 64px}
+.intro{margin:0 0 22px}
+.eyebrow{font-size:13px;font-weight:600;color:var(--blue)}
+.intro h2{font-size:34px;font-weight:700;letter-spacing:-.022em;margin:2px 0 0;line-height:1.12;text-wrap:balance}
+.intro p{color:var(--ink2);margin:8px 0 0;max-width:66ch;font-size:16px}
+.layout{display:grid;grid-template-columns:minmax(0,380px) minmax(0,1fr);gap:24px;align-items:start}
+.content{display:grid;gap:24px;min-width:0}
+@media (max-width:900px){
+  .layout{display:flex;flex-direction:column;gap:20px}
+  .content{display:contents}
+  .content > *{order:3}
+  #overview{order:1}
+  .rack{order:2}
+  .intro h2{font-size:27px}
+}
+
+/* parameter sheet */
+.rack{background:var(--card);border-radius:18px;box-shadow:var(--shadow);min-width:0;width:100%}
+@media (min-width:901px){.rack{position:sticky;top:72px;max-height:calc(100vh - 88px);display:flex;flex-direction:column}.rack-body{overflow:auto;overscroll-behavior:contain}}
+.rack-head{padding:18px 18px 10px}
+.rack-head h3{margin:0;font-size:20px;font-weight:700;letter-spacing:-.01em}
+.rack-head p{margin:2px 0 0;font-size:13px;color:var(--ink2)}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;padding:4px 18px 14px}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:none;border:0;background:var(--fill);color:var(--ink);font-size:13px;font-weight:500;padding:6px 13px;border-radius:999px;cursor:pointer}
+.tab[aria-selected="true"]{background:var(--ink);color:var(--card)}
+.rack-body{padding:0 18px 12px;border-top:1px solid var(--sep)}
+.gnote{font-size:13px;color:var(--ink2);margin:14px 0 2px;line-height:1.4}
+.ctl{padding:15px 0;border-bottom:1px solid var(--sep)}
+.ctl:last-child{border-bottom:0}
+.ctl-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.name{font-size:15px;font-weight:500;line-height:1.3}
+.field{display:inline-flex;align-items:center;background:var(--fill);border-radius:8px;padding:0 9px 0 2px;flex:none}
+.field input{width:74px;border:0;background:transparent;font:500 15px var(--f);font-variant-numeric:tabular-nums;color:var(--ink);text-align:right;padding:5px 3px;outline:none}
+.field:focus-within{box-shadow:0 0 0 2px var(--blue)}
+.field .u{font-size:13px;color:var(--ink2);margin-left:3px}
+.desc{font-size:13px;color:var(--ink2);margin:6px 0 0;line-height:1.4}
+.dyn{color:var(--ink);font-weight:500;white-space:nowrap}
+.aff{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.aff span{font-size:11.5px;color:var(--blue);background:var(--blue-soft);padding:2px 8px;border-radius:999px}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:28px;margin:6px 0 0;background:transparent;cursor:pointer;--p:50%}
+input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(to right,var(--blue) 0 var(--p),var(--track) var(--p) 100%)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:24px;border-radius:50%;background:#fff;margin-top:-10px;box-shadow:0 0.5px 4px rgba(0,0,0,.18),0 3px 8px rgba(0,0,0,.12);border:0.5px solid rgba(0,0,0,.04)}
+input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:var(--track)}
+input[type=range]::-moz-range-progress{height:4px;border-radius:2px;background:var(--blue)}
+input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;background:#fff;border:0;box-shadow:0 0.5px 4px rgba(0,0,0,.18),0 3px 8px rgba(0,0,0,.12)}
+input[type=range]:focus-visible{outline:none;box-shadow:none}
+input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 4px var(--blue-soft),0 0 0 1px var(--blue)}
+.row-main{display:flex;justify-content:space-between;align-items:center;gap:14px}
+.switch{position:relative;flex:none;width:51px;height:31px}
+.switch input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer;z-index:1}
+.switch span{position:absolute;inset:0;border-radius:999px;background:var(--track);transition:background .2s}
+.switch span::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.2);transition:transform .2s}
+.switch input:checked + span{background:var(--green)}
+.switch input:checked + span::after{transform:translateX(20px)}
+.switch input:focus-visible + span{box-shadow:0 0 0 3px var(--blue-soft),0 0 0 1px var(--blue)}
+.seg{display:flex;background:var(--fill);border-radius:9px;padding:2px;gap:2px;margin-top:9px}
+.seg button{flex:1 1 0;border:0;background:transparent;font-size:13px;font-weight:500;color:var(--ink);padding:6px 6px;border-radius:7px;cursor:pointer;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.seg button[aria-checked="true"]{background:var(--segsel);box-shadow:0 1px 3px rgba(0,0,0,.14);font-weight:600}
+
+/* cards */
+.card{background:var(--card);border-radius:18px;box-shadow:var(--shadow);padding:20px;min-width:0}
+.sec-head{display:flex;justify-content:space-between;align-items:flex-end;gap:10px 16px;flex-wrap:wrap;margin-bottom:16px}
+.sec-head h3{margin:0;font-size:22px;font-weight:700;letter-spacing:-.015em;line-height:1.2}
+.sec-head p{margin:3px 0 0;color:var(--ink2);font-size:14px;max-width:62ch}
+.inline-field{display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--ink2)}
+
+/* overview */
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.kpi{background:var(--card);border-radius:18px;box-shadow:var(--shadow);padding:16px 18px 14px;display:flex;flex-direction:column;gap:3px}
+.k-label{font-size:13px;font-weight:600;color:var(--ink2)}
+.k-val{font-size:32px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.15;overflow-wrap:anywhere}
+.k-val .unit{font-size:16px;font-weight:500;color:var(--ink2);margin-left:4px;letter-spacing:0}
+.k-cap{font-size:13px;color:var(--ink2);line-height:1.35}
+.k-goal{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:auto;padding-top:10px;border-top:1px solid var(--sep);font-size:13px;color:var(--ink2)}
+.kpi .k-cap{margin-bottom:10px}
+.k-goal input{width:56px;border:0;background:var(--fill);border-radius:6px;padding:3px 6px;font:500 13px var(--f);color:var(--ink);text-align:right}
+.badge{font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;white-space:nowrap}
+.badge.ok{background:var(--green-soft);color:var(--green)}
+.badge.bad{background:var(--red-soft);color:var(--red)}
+.link{border:0;background:none;color:var(--blue);font-size:13px;font-weight:600;cursor:pointer;padding:2px 0;margin-left:auto}
+.link:hover{text-decoration:underline}
+.ov-foot{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px}
+.ov-foot .note{font-size:13px;color:var(--ink2)}
+.flash{animation:fl 1.3s ease-out}
+@keyframes fl{0%{background-color:var(--blue-soft)}100%{background-color:transparent}}
+.kpi.flash{animation:flk 1.3s ease-out}
+@keyframes flk{0%{box-shadow:0 0 0 2px var(--blue)}100%{box-shadow:var(--shadow)}}
+
+/* what changed */
+.ch-title{font-size:15px;font-weight:600}
+.ch-sub{font-size:13px;color:var(--ink2);margin-top:2px}
+.crows{margin-top:10px}
+.crow{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--sep);font-size:14px}
+.arr{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;background:var(--fill);color:var(--ink2)}
+.arr.better{background:var(--green-soft);color:var(--green)}
+.arr.worse{background:var(--red-soft);color:var(--red)}
+.crow .cv{font-variant-numeric:tabular-nums;color:var(--ink2);text-align:right;font-size:13px}
+.crow .cv b{color:var(--ink);font-weight:600}
+.legend-c{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--ink2);margin-top:10px}
+.legend-c span{display:inline-flex;align-items:center;gap:6px}
+
+/* readout lists */
+.lists{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,350px),1fr));gap:8px 28px}
+.list h4{font-size:12.5px;font-weight:600;color:var(--ink2);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 2px}
+.mrow{display:flex;justify-content:space-between;gap:14px;padding:11px 6px;border-bottom:1px solid var(--sep);border-radius:6px}
+.m-left{min-width:0}
+.m-name{font-size:15px;font-weight:500;display:flex;gap:8px;align-items:center}
+.m-exp{font-size:13px;color:var(--ink2);line-height:1.35;margin-top:1px}
+.m-note{font-size:12.5px;color:var(--orange);margin-top:2px}
+.st-bad .m-note{color:var(--red)}
+.m-right{text-align:right;flex:none;max-width:46%}
+.m-val{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.m-f{font:11.5px var(--fm);color:var(--ink3);margin-top:1px}
+.m-base{font-size:12px;color:var(--blue);margin-top:2px}
+.dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--track)}
+.st-ok .dot{background:var(--green)}.st-warn .dot{background:var(--orange)}.st-bad .dot{background:var(--red)}
+
+/* plots */
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:20px}
+figure{margin:0}
+.fc-t{font-size:17px;font-weight:600;letter-spacing:-.01em}
+.howto{font-size:13px;color:var(--ink2);margin:2px 0 8px;line-height:1.4}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--ink2);margin-bottom:6px}
+.sw{display:inline-block;width:16px;border-top:2.5px solid var(--blue);vertical-align:middle;margin-right:5px;border-radius:2px}
+.sw.or{border-top:2px dashed var(--orange)}.sw.gr{border-top:2px dashed var(--ink3)}.sw.box{height:10px;border:1px solid var(--blue);background:var(--blue-soft);border-radius:3px}
+.chart{width:100%;min-width:0}
+.chart svg{display:block;width:100%;height:auto}
+.chart text{font-family:var(--f);font-size:11px;fill:var(--ink3)}
+.chart .lbl{fill:var(--ink);font-size:11.5px;font-weight:500}
+.chart .grid{stroke:var(--sep);stroke-width:1}
+.chart .axis{stroke:var(--sep);stroke-width:1}
+.chart .s-main{stroke:var(--blue);stroke-width:2.5;fill:none;stroke-linejoin:round;stroke-linecap:round}
+.chart .s-rx{stroke:var(--orange);stroke-width:1.8;fill:none;stroke-dasharray:5 3}
+.chart .s-thr{stroke:var(--orange);stroke-width:1.8;stroke-dasharray:6 4;fill:none}
+.chart .s-cnr{stroke:var(--ink3);stroke-width:1.5;stroke-dasharray:3 3;fill:none}
+.chart .s-mark{stroke:var(--ink2);stroke-width:1;stroke-dasharray:2 3}
+.chart .area{fill:var(--blue);opacity:.07}
+.chart .region{fill:var(--blue-soft);stroke:var(--blue);stroke-width:1.5}
+.chart .cell{stroke:var(--blue);stroke-width:.6;opacity:.35}
+.chart .pt{fill:var(--orange);stroke:var(--card);stroke-width:2}
+
+/* budget */
+.budget{display:grid;gap:0}
+.brow{display:grid;grid-template-columns:minmax(0,1.6fr) 84px minmax(0,1fr);gap:12px;align-items:center;font-size:14px;padding:9px 0;border-bottom:1px solid var(--sep)}
+.bval{font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
+.bbar{height:8px;background:var(--fill);border-radius:4px;position:relative;overflow:hidden}
+.bbar i{position:absolute;top:0;bottom:0;left:0;border-radius:4px;background:var(--ink3)}
+.bbar i.gain{background:var(--blue)}.bbar i.loss{background:var(--orange)}.bbar i.good{background:var(--green)}.bbar i.bad{background:var(--red)}
+.brow.total{font-weight:600;border-bottom:1px solid var(--ink3)}
+.brow.last{border-bottom:0}
+.bnote{font-size:13px;color:var(--ink2);margin:12px 0 0}
+.assume{font-size:13px;color:var(--ink2);margin:0;padding-left:18px;display:grid;gap:4px;max-width:100ch}
+
+/* toast */
+.toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translate(-50%,16px);opacity:0;background:var(--glass);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.18),0 0 0 1px var(--sep);padding:10px 16px;font-size:13px;width:max-content;max-width:min(calc(100vw - 32px),520px);transition:opacity .25s,transform .25s;pointer-events:none;z-index:30}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast b{font-weight:600}
+.toast .t2{color:var(--ink2)}
+@media (prefers-reduced-motion:reduce){.flash,.kpi.flash{animation:none}.toast,.switch span,.switch span::after{transition:none}}
+@media (max-width:520px){.brow{grid-template-columns:minmax(0,1fr) 76px}.brow .bbar{grid-column:1 / -1}.k-val{font-size:28px}.card{padding:16px}}
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="bar-in">
+    <div><h1>FMCW Radar Workbench</h1><div class="sub">USRP-2901 · Radar Designer Part A</div></div>
+    <div class="acts">
+      <div class="theme" role="radiogroup" aria-label="Theme" id="theme">
+        <button type="button" role="radio" data-t="auto" aria-checked="true">Auto</button>
+        <button type="button" role="radio" data-t="light" aria-checked="false">Light</button>
+        <button type="button" role="radio" data-t="dark" aria-checked="false">Dark</button>
+      </div>
+      <button class="pbtn" id="pin" type="button">Pin baseline</button>
+      <button class="pbtn" id="reset" type="button">Reset</button>
+    </div>
+    <div class="strip" id="strip" aria-label="Key results"></div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="intro">
+    <div class="eyebrow">Interactive design study</div>
+    <h2>Tune the radar. See every effect.</h2>
+    <p>Move a slider on the left. The key results update instantly, and “What changed” tells you which readouts moved and whether that is better or worse.</p>
+  </div>
+
+  <div class="layout">
+    <aside class="rack" aria-label="Radar parameters">
+      <div class="rack-head"><h3>Parameters</h3><p>Grouped like the Radar Designer app.</p></div>
+      <div class="tabs" role="tablist" id="tabs"></div>
+      <div class="rack-body" id="rack"></div>
+    </aside>
+
+    <main class="content">
+      <section id="overview">
+        <div class="sec-head">
+          <div><h3>Key results</h3><p>Set a goal on each card. If it is not met, tap Fix to move the right parameter.</p></div>
+          <label class="inline-field" for="h-evalR">Target at
+            <span class="field"><input type="number" id="h-evalR" min="1" max="5000" step="1"><span class="u">m</span></span></label>
+        </div>
+        <div class="kpis" id="kpis"></div>
+        <div class="ov-foot"><button class="pbtn primary" id="fitall" type="button">Fit all goals</button><span class="note" id="fitnote"></span></div>
+      </section>
+
+      <section class="card" id="changes" aria-live="polite"></section>
+
+      <section class="card">
+        <div class="sec-head"><div><h3>Plots</h3><p>The orange point marks the target range or the detection limit.</p></div></div>
+        <div class="charts">
+          <figure>
+            <div class="fc-t">SNR vs range</div>
+            <p class="howto">The target is detectable wherever the blue line is above the orange line. The shaded zone is the detectable range.</p>
+            <div class="legend"><span><i class="sw"></i>SNR of one chirp</span><span><i class="sw or"></i>needed SNR (Dx)</span><span id="lg-cnr" hidden><i class="sw gr"></i>ground clutter</span></div>
+            <div class="chart" id="ch-snr"></div>
+          </figure>
+          <figure>
+            <div class="fc-t">Detection chance vs range</div>
+            <p class="howto">How likely the radar is to see the target at each range. Aim to stay above the orange line.</p>
+            <div class="legend"><span><i class="sw"></i>Pd per decision</span><span><i class="sw or"></i>your target Pd</span></div>
+            <div class="chart" id="ch-pd"></div>
+          </figure>
+          <figure>
+            <div class="fc-t">Range–speed coverage</div>
+            <p class="howto">The blue box is every range and speed you can measure. Each small cell is one resolution cell (δR × δv).</p>
+            <div class="legend"><span><i class="sw box"></i>measurable area</span></div>
+            <div class="chart" id="ch-cov"></div>
+          </figure>
+          <figure>
+            <div class="fc-t">Antenna pattern</div>
+            <p class="howto">Gain in each up/down direction. The dotted line is the direction of the target.</p>
+            <div class="legend"><span><i class="sw"></i>TX antenna</span><span id="lg-rx" hidden><i class="sw or"></i>RX antenna</span></div>
+            <div class="chart" id="ch-ant"></div>
+          </figure>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="sec-head"><div><h3>All readouts</h3><p>Every metric from the flowcharts, in plain words. Green is fine, orange needs a look, red is a problem.</p></div></div>
+        <div class="lists" id="metrics"></div>
+      </section>
+
+      <section class="card">
+        <div class="sec-head"><div><h3>SNR budget</h3><p>How the needed SNR is built up, then what you actually get at the target.</p></div></div>
+        <div class="budget" id="budget"></div>
+        <p class="bnote" id="bnote"></p>
+      </section>
+
+      <section class="card">
+        <div class="sec-head"><div><h3>About the model</h3></div></div>
+        <ul class="assume">
+          <li>Single-chirp SNR uses the radar equation with chirp energy: SNR = Pt·Gt·Gr·λ²·σ·Tc / ((4π)³·R<sup>4</sup>·k·Ts·L).</li>
+          <li>Needed SNR: Albersheim's equation (Swerling 0) and the exact Swerling 1 single-pulse result. Coherent integration subtracts 10·log10N.</li>
+          <li>CFAR loss uses the cell-averaging formula for Swerling 1. Binary and CPI M-of-N use binomial statistics, with an exact Marcum-Q step for binary.</li>
+          <li>Multipath is a flat-Earth two-ray model with Fresnel reflection (land εr 15, sea εr 80). Clutter uses a constant-γ model.</li>
+          <li>Rough estimates: ADC quantization (−15 dBm max input mapped to full scale at 0 dB gain), atmosphere, rain (ITU-R P.838 values), scan loss.</li>
+          <li>Use it to learn and compare designs. Confirm final numbers in MATLAB Radar Designer.</li>
+        </ul>
+      </section>
+    </main>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function(){
+"use strict";
+const c=299792458, kB=1.380649e-23, DEG=Math.PI/180, log10=Math.log10, NS="http://www.w3.org/2000/svg";
+
+/* ---------- parameters ---------- */
+const DEF={f0:2.4,B:20,Tc:500,b2b:true,PRF:2,PtdBm:10,N:128,
+  NF:8,Tref:290,fs:30.72,iso:40,quant:false,bits:12,rxGain:40,
+  gainModel:"chart",azB:60,elB:60,sepRx:false,razB:60,relB:60,h:1.5,tilt:0,pol:"H",scan:"none",sector:90,escan:30,
+  Pd:0.9,pfaExp:6,integ:"coherent",binary:false,binM:64,mti:false,mtiLoss:2,cfar:false,cfarCells:16,cpis:1,cpiM:1,eclipse:true,
+  rcsDb:0,sw:"0",ht:1.5,evalR:50,accel:5,Lc:3,stc:false,stcR:10,stcX:4,
+  earth:"flat",atmos:false,surface:"none",gamma:-20,rain:0,trkM:2,trkN:3,
+  gdR:5,gRmax:100,gdv:0.5,gvmax:10,gtu:100};
+
+const GROUPS=[["main","Main"],["hw","Hardware"],["ant","Antenna"],["det","Detection"],["tgt","Target & loss"],["env","Environment"],["trk","Tracking"]];
+const GNOTE={
+  main:"Waveform knobs. Bandwidth sets range resolution; chirp timing and N set speed.",
+  hw:"Receiver noise and USRP limits. Noise raises MDS and cuts range.",
+  ant:"Gains raise SNR. Height, tilt and polarization matter once a ground surface is on (Environment).",
+  det:"These set the SNR you need (Dx). A lower Dx means longer range.",
+  tgt:"Target size, extra losses and the evaluation range used for Pd, beat frequency and delay.",
+  env:"Propagation. Mostly small at lab ranges below 6 GHz, but multipath can be large.",
+  trk:"Track confirmation: M detections out of N updates."
+};
+const SPEC=[
+ {g:"main",k:"f0",l:"Frequency f0",u:"GHz",min:0.07,max:6,step:0.01,d:"Carrier of the chirp. USRP-2901 tunes 70 MHz to 6 GHz.",a:"λ → blind speed, δv, SNR, PAP"},
+ {g:"main",k:"B",l:"Sweep bandwidth B",u:"MHz",min:1,max:56,step:0.5,d:"How far the chirp sweeps (app: Pulse Bandwidth). USRP max is 56 MHz.",a:"δR, chirp slope, MDS, sample rate"},
+ {g:"main",k:"Tc",l:"Chirp duration Tc",u:"µs",min:10,max:2000,step:10,d:"How long one sweep lasts (app: Pulse Width).",a:"chirp energy → SNR, slope, beat freq, duty"},
+ {g:"main",k:"b2b",t:"check",l:"Back-to-back chirps",d:"PRF = 1/Tc, duty cycle 100%. Typical for FMCW."},
+ {g:"main",k:"PRF",l:"PRF",u:"kHz",min:0.1,max:100,step:0.1,show:p=>!p.b2b,d:"Chirps per second (app: PRF). Must be ≤ 1/Tc.",a:"R_ua, blind speed, δv, duty, frame time"},
+ {g:"main",k:"PtdBm",l:"Peak power Pt",u:"dBm",min:-30,max:20,step:0.5,d:"Power during the chirp (app: Peak Power).",x:p=>fW(10**((p.PtdBm-30)/10)),a:"SNR, max range, EIRP, PAP, TX→RX leakage"},
+ {g:"main",k:"N",l:"Chirps per frame N",u:"",min:1,max:1024,step:1,d:"Chirps in one range–Doppler map (app: Number of Pulses).",a:"frame time, δv, Dx, update rate"},
+
+ {g:"hw",k:"NF",l:"Noise figure",u:"dB",min:0,max:20,step:0.5,d:"Receiver noise (app: Noise Figure).",a:"Ts → SNR, MDS"},
+ {g:"hw",k:"Tref",l:"Reference temperature",u:"K",min:200,max:400,step:1,d:"290 K is the standard reference.",a:"Ts → SNR, MDS"},
+ {g:"hw",k:"fs",l:"Sample rate fs",u:"MS/s",min:1,max:61.44,step:0.01,d:"Needs fs ≥ B. With both channels in use, plan for 30.72 MS/s or less.",a:"sample-rate check"},
+ {g:"hw",k:"iso",l:"TX→RX isolation",u:"dB",min:10,max:80,step:1,d:"Coupling loss between the TX and RX ports or antennas.",a:"leakage at RX input"},
+ {g:"hw",k:"quant",t:"check",l:"Include ADC quantization noise",d:"App: Quantization Noise. Rough USRP model."},
+ {g:"hw",k:"bits",l:"ADC bits",u:"bit",min:4,max:16,step:1,show:p=>p.quant,d:"USRP-2901 uses a 12-bit ADC.",x:p=>"SQNR ≈ "+(6.02*p.bits+1.76).toFixed(1)+" dB",a:"Tq → SNR, MDS"},
+ {g:"hw",k:"rxGain",l:"RX gain",u:"dB",min:0,max:76,step:1,show:p=>p.quant,d:"More gain hides quantization noise but lets leakage saturate the ADC.",a:"Tq, ADC headroom"},
+
+ {g:"ant",k:"gainModel",t:"select",l:"Gain formula",opts:[["chart","π² / (θaz·θel)"],["ideal","4π / (θaz·θel)"]],d:"Your chart used π². The textbook ideal form is 4π."},
+ {g:"ant",k:"azB",l:"TX azimuth beamwidth",u:"°",min:2,max:120,step:1,d:"Half-power width in azimuth.",x:null,a:"Gt → SNR, EIRP, PAP, scan beams"},
+ {g:"ant",k:"elB",l:"TX elevation beamwidth",u:"°",min:2,max:120,step:1,d:"Half-power width in elevation.",x:p=>"Gt = "+(10*log10(gainVal(p,p.azB,p.elB))).toFixed(1)+" dBi",a:"Gt, antenna pattern"},
+ {g:"ant",k:"sepRx",t:"check",l:"Different antenna for receive",d:"App: Use Different Antenna for Receive. EIRP uses Gt only."},
+ {g:"ant",k:"razB",l:"RX azimuth beamwidth",u:"°",min:2,max:120,step:1,show:p=>p.sepRx,d:"",a:"Gr → SNR"},
+ {g:"ant",k:"relB",l:"RX elevation beamwidth",u:"°",min:2,max:120,step:1,show:p=>p.sepRx,d:"",x:p=>"Gr = "+(10*log10(gainVal(p,p.razB,p.relB))).toFixed(1)+" dBi",a:"Gr → SNR"},
+ {g:"ant",k:"h",l:"Antenna height h",u:"m",min:0,max:30,step:0.1,d:"Height above ground.",a:"target angle, multipath, clutter, horizon"},
+ {g:"ant",k:"tilt",l:"Tilt angle",u:"°",min:-30,max:30,step:0.5,d:"Beam pointing in elevation. Positive points up.",a:"gain at target, clutter"},
+ {g:"ant",k:"pol",t:"select",l:"Polarization",opts:[["H","Horizontal"],["V","Vertical"]],d:"Only matters with a ground surface or rain.",a:"multipath, rain loss"},
+ {g:"ant",k:"scan",t:"select",l:"Scan mode",opts:[["none","None"],["mechanical","Mechanical"],["electronic","Electronic"]],d:"Scanning adds beam-shape loss and search time.",a:"Dx, search time"},
+ {g:"ant",k:"sector",l:"Azimuth scan sector",u:"°",min:5,max:360,step:5,show:p=>p.scan!=="none",d:"Beam positions = sector / azimuth beamwidth.",a:"search time"},
+ {g:"ant",k:"escan",l:"Max electronic scan angle",u:"°",min:0,max:60,step:1,show:p=>p.scan==="electronic",d:"Array gain drops roughly with cos θ each way.",a:"scan loss → Dx"},
+
+ {g:"det",k:"Pd",l:"Probability of detection",u:"",min:0.5,max:0.99,step:0.01,d:"Target Pd per decision (app: Metric).",a:"Dx → max range, MDS"},
+ {g:"det",k:"pfaExp",l:"False alarm Pfa = 10^−x",u:"x",min:3,max:8,step:0.5,d:"Smaller Pfa raises the threshold (app: Probability of False Alarm).",x:p=>"Pfa = "+sci(10**(-p.pfaExp)),a:"Dx, false tracks"},
+ {g:"det",k:"integ",t:"select",l:"Chirp integration",opts:[["coherent","Coherent"],["noncoherent","Noncoherent"]],d:"Coherent gives the full N gain (FFT across chirps).",a:"Dx"},
+ {g:"det",k:"sw",t:"select",l:"Target fluctuation",opts:[["0","Swerling 0 (steady)"],["1","Swerling 1 (fluctuating)"]],d:"Swerling 1 needs more SNR for high Pd.",a:"Dx"},
+ {g:"det",k:"binary",t:"check",l:"Binary integration (M-of-N)",show:p=>p.integ==="noncoherent",d:"Noncoherent only. Detect if M of N chirps cross."},
+ {g:"det",k:"binM",l:"Binary M",u:"",min:1,max:1024,step:1,show:p=>p.integ==="noncoherent"&&p.binary,d:"Capped at N.",a:"binary loss → Dx"},
+ {g:"det",k:"mti",t:"check",l:"MTI on",d:"Notches 0 m/s clutter. Costs an MTI loss."},
+ {g:"det",k:"mtiLoss",l:"MTI loss",u:"dB",min:0,max:10,step:0.5,show:p=>p.mti,d:"Set from the app's reported value.",a:"Dx"},
+ {g:"det",k:"cfar",t:"check",l:"CFAR on",d:"Cell-averaging CFAR holds Pfa constant."},
+ {g:"det",k:"cfarCells",l:"CFAR reference cells",u:"",min:2,max:128,step:1,show:p=>p.cfar,d:"Fewer cells → bigger CFAR loss.",a:"Dx"},
+ {g:"det",k:"cpis",l:"Number of CPIs",u:"",min:1,max:10,step:1,d:"Frames combined per decision.",a:"Pd per decision, decision time"},
+ {g:"det",k:"cpiM",l:"CPI M (of the CPIs)",u:"",min:1,max:10,step:1,show:p=>p.cpis>1,d:"Detect when M of the CPIs cross. Capped at the CPI count.",a:"Dx"},
+ {g:"det",k:"eclipse",t:"check",l:"Eclipsing loss",d:"FMCW useful time is Tc − τ, with τ = 2R/c."},
+
+ {g:"tgt",k:"rcsDb",l:"Radar cross section σ",u:"dBsm",min:-30,max:30,step:0.5,d:"Person ≈ 0 dBsm, car ≈ 10–20 dBsm.",x:p=>"σ = "+sig(10**(p.rcsDb/10))+" m²",a:"SNR, max range (∝ σ¼)"},
+ {g:"tgt",k:"ht",l:"Target height",u:"m",min:0,max:30,step:0.1,d:"",a:"target angle, multipath, horizon"},
+ {g:"tgt",k:"evalR",l:"Evaluation range",u:"m",min:1,max:5000,step:1,d:"Where Pd, SNR, beat frequency and delay are read.",a:"Pd(R), fb, τ, track probabilities"},
+ {g:"tgt",k:"accel",l:"Max acceleration",u:"m/s²",min:0,max:50,step:0.5,d:"Agile targets need bigger track gates.",a:"gate size → false tracks"},
+ {g:"tgt",k:"Lc",l:"Custom loss L",u:"dB",min:0,max:20,step:0.5,d:"Cables, mismatch, processing.",a:"SNR, max range (∝ L^−¼)"},
+ {g:"tgt",k:"stc",t:"check",l:"Sensitivity Time Control (STC)",d:"Cuts near-range SNR to avoid saturation."},
+ {g:"tgt",k:"stcR",l:"STC cutoff range",u:"m",min:1,max:500,step:1,show:p=>p.stc,d:"",a:"near-range SNR"},
+ {g:"tgt",k:"stcX",l:"STC exponent",u:"",min:0,max:4,step:0.5,show:p=>p.stc,d:"Gain scales as (R / cutoff)^x below the cutoff.",a:"near-range SNR"},
+
+ {g:"env",k:"earth",t:"select",l:"Earth model",opts:[["flat","Flat"],["curved","Curved (4/3 Earth)"]],d:"Curved Earth adds a radar horizon.",a:"horizon"},
+ {g:"env",k:"atmos",t:"check",l:"Atmosphere loss",d:"Gas loss. Small below 6 GHz."},
+ {g:"env",k:"surface",t:"select",l:"Surface",opts:[["none","None (free space)"],["land","Land"],["sea","Sea"]],d:"Adds ground multipath and clutter.",a:"multipath F(R) peaks and nulls, CNR"},
+ {g:"env",k:"gamma",l:"Clutter γ",u:"dB",min:-50,max:0,step:1,show:p=>p.surface!=="none",d:"Land about −20 dB, sea about −40 dB.",a:"CNR"},
+ {g:"env",k:"rain",l:"Rain rate",u:"mm/h",min:0,max:100,step:1,d:"Heavier rain or higher f0 → more loss.",a:"SNR at range"},
+
+ {g:"trk",k:"trkM",l:"Confirm M",u:"",min:1,max:10,step:1,d:"Detections needed to confirm a track. Capped at N.",a:"P(true track), P(false track)"},
+ {g:"trk",k:"trkN",l:"Confirm N",u:"",min:1,max:10,step:1,d:"Updates in the confirmation window.",a:"P(true track), P(false track)"}
+];
+const SMAP={}; SPEC.forEach(s=>SMAP[s.k]=s);
+
+/* ---------- formatting ---------- */
+function sig(x,n){n=n||3; if(x==null||Number.isNaN(x)) return "—"; if(!isFinite(x)) return x>0?"∞":"−∞"; if(x===0) return "0";
+  const a=Math.abs(x); if(a>=1e5) return Math.round(x).toLocaleString("en-US"); if(a<1e-3) return sci(x); return String(Number(x.toPrecision(n)));}
+function sci(x){ if(!isFinite(x)||x===0) return sig(x); const e=Math.floor(log10(Math.abs(x))); const m=x/10**e; return Number(m.toPrecision(3))+"e"+e;}
+function fLen(m){ if(!isFinite(m)) return m>0?"∞":"—"; const a=Math.abs(m); if(a<1) return sig(m*100)+" cm"; if(a<1000) return sig(m)+" m"; return sig(m/1000)+" km";}
+function fTime(s){ if(!isFinite(s)) return "—"; const a=Math.abs(s); if(a<1e-6) return sig(s*1e9)+" ns"; if(a<1e-3) return sig(s*1e6)+" µs"; if(a<1) return sig(s*1e3)+" ms"; return sig(s)+" s";}
+function fFreq(h){ if(!isFinite(h)) return "—"; const a=Math.abs(h); if(a<1e3) return sig(h)+" Hz"; if(a<1e6) return sig(h/1e3)+" kHz"; if(a<1e9) return sig(h/1e6)+" MHz"; return sig(h/1e9)+" GHz";}
+function fW(w){ if(w<1e-3) return sig(w*1e6)+" µW"; if(w<1) return sig(w*1e3)+" mW"; return sig(w)+" W";}
+function fdB(x,u){ if(!isFinite(x)) return x>0?"∞":"−∞"; return x.toFixed(1)+" "+(u||"dB");}
+function fPct(p){ if(!isFinite(p)) return "—"; if(p>0.9999) return ">99.99 %"; if(p<1e-4) return sci(p); return (p*100).toFixed(p>0.999?2:1)+" %";}
+
+/* ---------- math helpers ---------- */
+const LF=[0]; for(let i=1;i<=1100;i++) LF[i]=LF[i-1]+Math.log(i);
+function tail(n,m,p){ // P(X >= m), X ~ Bin(n,p)
+  if(m<=0) return 1; if(m>n) return 0; if(p<=0) return 0; if(p>=1) return 1;
+  const lp=Math.log(p), lq=Math.log1p(-p); let mx=-Infinity; const t=[];
+  for(let i=m;i<=n;i++){const v=LF[n]-LF[i]-LF[n-i]+i*lp+(n-i)*lq; t.push(v); if(v>mx) mx=v;}
+  let s=0; for(const v of t) s+=Math.exp(v-mx); return Math.min(1,Math.exp(mx)*s);}
+function solveP(n,m,target){ let lo=-30,hi=0, lt=Math.log(target);
+  for(let i=0;i<60;i++){const mid=(lo+hi)/2; if(Math.log(Math.max(tail(n,m,10**mid),1e-300))<lt) lo=mid; else hi=mid;} return 10**hi;}
+function solvePd(n,m,target){ let lo=0,hi=1; for(let i=0;i<55;i++){const mid=(lo+hi)/2; if(tail(n,m,mid)<target) lo=mid; else hi=mid;} return (lo+hi)/2;}
+function albersheim(pd,pf,n){ const A=Math.log(0.62/pf), B=Math.log(pd/(1-pd)); const Z=Math.max(1e-6,A+0.12*A*B+1.7*B);
+  return -5*log10(n)+(6.2+4.54/Math.sqrt(n+0.44))*log10(Z);}
+function i0e(z){ if(z<3.75){const t=(z/3.75)**2; return (1+t*(3.5156229+t*(3.0899424+t*(1.2067492+t*(0.2659732+t*(0.0360768+t*0.0045813))))))*Math.exp(-z);}
+  const t=3.75/z; return (0.39894228+t*(0.01328592+t*(0.00225319+t*(-0.00157565+t*(0.00916281+t*(-0.02057706+t*(0.02635537+t*(-0.01647633+t*0.00392377))))))))/Math.sqrt(z);}
+function pdSW0(snr,pf){ // exact single-pulse Swerling 0: Marcum Q1(sqrt(2 snr), sqrt(-2 ln pf))
+  const a=Math.sqrt(2*Math.max(snr,0)), b=Math.sqrt(-2*Math.log(pf)); if(a>b+9) return 1;
+  const n=240, h=b/n; let s=0;
+  for(let i=0;i<=n;i++){const x=i*h, f=x*Math.exp(-((x-a)**2)/2)*i0e(a*x); s+=f*(i===0||i===n?1:(i%2?4:2));}
+  return Math.min(1,Math.max(0,1-s*h/3));}
+function sw0single(pd,pf){ let lo=-40,hi=40; for(let i=0;i<50;i++){const mid=(lo+hi)/2; if(pdSW0(10**(mid/10),pf)<pd) lo=mid; else hi=mid;} return (lo+hi)/2;}
+function sw1single(pd,pf){ return 10*log10(Math.max(Math.log(pf)/Math.log(pd)-1,1e-6));}
+function cfarLoss(pd,pf,M){ const ideal=Math.log(pf)/Math.log(pd)-1; const ca=(Math.pow(pf,-1/M)-1)/(Math.pow(pd,-1/M)-1)-1;
+  return (ideal>0&&ca>0)?10*log10(ca/ideal):0;}
+function invPd(f,s){ let lo=1e-6,hi=1-1e-10; if(f(lo)>=s) return 0; if(f(hi)<=s) return 1;
+  for(let i=0;i<45;i++){const mid=(lo+hi)/2; if(f(mid)<s) lo=mid; else hi=mid;} return (lo+hi)/2;}
+function patdB(th,bw){ return Math.max(-12*(th/bw)**2,-30);}
+function gainVal(p,az,el){ return (p.gainModel==="ideal"?4*Math.PI:Math.PI**2)/((az*DEG)*(el*DEG));}
+function csqrt(a,b){ const r=Math.hypot(a,b); return [Math.sqrt((r+a)/2),(b<0?-1:1)*Math.sqrt(Math.max(0,(r-a)/2))];}
+function cdiv(a,b){ const d=b[0]*b[0]+b[1]*b[1]; return [(a[0]*b[0]+a[1]*b[1])/d,(a[1]*b[0]-a[0]*b[1])/d];}
+function fresnel(psi,pol,surf,lam){
+  const s=surf==="sea"?{er:80,sg:4}:{er:15,sg:0.005};
+  const e=[s.er,-60*lam*s.sg], sn=Math.sin(psi), c2=Math.cos(psi)**2, rt=csqrt(e[0]-c2,e[1]);
+  if(pol==="H") return cdiv([sn-rt[0],-rt[1]],[sn+rt[0],rt[1]]);
+  const es=[e[0]*sn,e[1]*sn]; return cdiv([es[0]-rt[0],es[1]-rt[1]],[es[0]+rt[0],es[1]+rt[1]]);}
+const RAIN=[[1,2.59e-5,0.9691,3.08e-5,0.8592],[2,8.47e-5,1.0664,9.98e-5,0.949],[4,1.071e-4,1.6009,2.461e-4,1.2476],[6,7.056e-4,1.59,4.878e-4,1.5728]];
+function rainK(f,pol){ f=Math.min(6,Math.max(1,f)); let i=0; while(i<RAIN.length-2&&f>RAIN[i+1][0]) i++;
+  const a=RAIN[i],b=RAIN[i+1], t=(Math.log(f)-Math.log(a[0]))/(Math.log(b[0])-Math.log(a[0])), o=pol==="H"?1:3;
+  return {k:Math.exp(Math.log(a[o])+t*(Math.log(b[o])-Math.log(a[o]))), a:a[o+1]+t*(b[o+1]-a[o+1])};}
+
+/* ---------- model ---------- */
+function model(p){
+  const m={};
+  const lam=c/(p.f0*1e9); m.lam=lam;
+  const B=p.B*1e6, Tc=p.Tc*1e-6; m.B=B; m.Tc=Tc;
+  let PRF=p.b2b?1/Tc:p.PRF*1e3; m.prfClamped=false;
+  if(!p.b2b&&PRF>1/Tc){PRF=1/Tc;m.prfClamped=true;}
+  m.PRF=PRF; const Trep=1/PRF;
+  m.S=B/Tc; m.dR=c/(2*B); m.Rua=c/(2*PRF);
+  const N=Math.max(1,Math.round(p.N)); m.N=N;
+  m.vb=lam*PRF/2; m.vua=m.vb/2; m.dv=lam*PRF/(2*N);
+  m.Tf=N*Trep; m.duty=Math.min(1,Tc*PRF);
+  const PtW=10**((p.PtdBm-30)/10); m.PtW=PtW;
+  const Gt=gainVal(p,p.azB,p.elB), raz=p.sepRx?p.razB:p.azB, rel=p.sepRx?p.relB:p.elB, Gr=gainVal(p,raz,rel);
+  m.Gt=Gt; m.Gr=Gr;
+  m.Ae=Gt*lam*lam/(4*Math.PI); m.pap=PtW*m.duty*m.Ae; m.eirp=p.PtdBm+10*log10(Gt);
+  m.Ts=p.Tref*10**(p.NF/10);
+  const fs=p.fs*1e6; m.fs=fs; m.FSin=-15-p.rxGain; m.sqnr=6.02*p.bits+1.76;
+  m.Tq=p.quant?10**((m.FSin-m.sqnr-30)/10)/(kB*fs):0;
+  m.Tsys=m.Ts+m.Tq;
+  m.noise=10*log10(kB*m.Tsys*B)+30;
+  m.leak=p.PtdBm-p.iso; m.headroom=m.FSin-m.leak;
+  const Lc=10**(p.Lc/10), sigma=10**(p.rcsDb/10);
+  const atm=p.atmos?2*(0.0055+0.0008*Math.max(0,p.f0-1))/1000:0;
+  let rain=0; if(p.rain>0){const r=rainK(p.f0,p.pol); rain=2*r.k*p.rain**r.a/1000;}
+  m.horizon=p.earth==="curved"?4120*(Math.sqrt(Math.max(p.h,0))+Math.sqrt(Math.max(p.ht,0))):Infinity;
+  const surf=p.surface!=="none", k0=2*Math.PI/lam;
+  function prop(R){
+    if(!surf) return 1;
+    const psi=Math.atan((p.h+p.ht)/R), G=fresnel(psi,p.pol,p.surface,lam);
+    const thd=Math.atan2(p.ht-p.h,R)/DEG, thr=-psi/DEG;
+    const rho=10**((patdB(thr-p.tilt,p.elB)-patdB(thd-p.tilt,p.elB))/20);
+    const ph=k0*2*p.h*p.ht/R;
+    const re=1+rho*(G[0]*Math.cos(ph)+G[1]*Math.sin(ph)), im=rho*(G[1]*Math.cos(ph)-G[0]*Math.sin(ph));
+    const F2=re*re+im*im; return Math.max(F2*F2,1e-8);
+  }
+  const K0=(4*Math.PI)**3*kB*m.Tsys;
+  function common(R){
+    if(R>m.horizon) return 0;
+    let x=PtW*lam*lam*Tc/(K0*R**4*Lc);
+    if(p.eclipse) x*=Math.max(0,(Tc-2*R/c)/Tc);
+    if(p.stc&&R<p.stcR) x*=(R/p.stcR)**p.stcX;
+    const ld=(atm+rain)*R; if(ld) x*=10**(-ld/10);
+    return x;
+  }
+  m.snrdB=R=>{
+    const th=Math.atan2(p.ht-p.h,R)/DEG;
+    const g=Gt*10**(patdB(th-p.tilt,p.elB)/10)*Gr*10**(patdB(th-p.tilt,rel)/10);
+    const v=common(R)*g*sigma*prop(R); return v>0?10*log10(v):-Infinity;
+  };
+  m.cnrdB=surf?R=>{
+    const psi=Math.atan(Math.max(p.h,0)/R), s0=10**(p.gamma/10)*Math.sin(psi);
+    const area=R*(p.azB*DEG)*m.dR/Math.cos(psi), th=-psi/DEG;
+    const g=Gt*10**(patdB(th-p.tilt,p.elB)/10)*Gr*10**(patdB(th-p.tilt,rel)/10);
+    const v=common(R)*g*s0*area; return v>0?10*log10(v):-Infinity;
+  }:null;
+
+  // detectability
+  const Pfa=10**(-p.pfaExp); m.Pfa=Pfa;
+  const K=Math.max(1,Math.round(p.cpis)), Mc=Math.min(Math.max(1,Math.round(p.cpiM)),K); m.K=K; m.Mc=Mc;
+  const pfac=K>1?solveP(K,Mc,Pfa):Pfa, pdc=K>1?solvePd(K,Mc,p.Pd):p.Pd; m.pfac=pfac; m.pdc=pdc;
+  const sw1=p.sw==="1", coh=p.integ==="coherent";
+  const single=(pd,pf)=>sw1?sw1single(pd,pf):albersheim(pd,pf,1);
+  const base=(pd,pf)=>coh?single(pd,pf)-10*log10(N):albersheim(pd,pf,N)+(sw1?sw1single(pd,pf)-albersheim(pd,pf,1):0);
+  const bin=p.binary&&!coh; m.bin=bin; const Mb=Math.min(Math.max(1,Math.round(p.binM)),N); m.Mb=Mb;
+  let Dbase, pf1=null;
+  const fluC=sw1?sw1single(pdc,pfac)-albersheim(pdc,pfac,1):0;
+  if(bin){pf1=solveP(N,Mb,pfac); const pd1=solvePd(N,Mb,pdc); Dbase=sw0single(pd1,pf1)+fluC; m.binLoss=Dbase-base(pdc,pfac);}
+  else {Dbase=base(pdc,pfac); m.binLoss=0;}
+  m.d0=albersheim(pdc,pfac,1); m.flu=sw1?sw1single(pdc,pfac)-m.d0:0; m.igain=(m.d0+m.flu)-Dbase;
+  m.cfarL=p.cfar?cfarLoss(pdc,pfac,Math.round(p.cfarCells)):0;
+  m.mtiL=p.mti?p.mtiLoss:0;
+  m.beams=p.scan==="none"?1:Math.max(1,Math.ceil(p.sector/p.azB));
+  m.scanL=p.scan==="none"?0:1.6+(p.scan==="electronic"?20*log10(1/Math.cos(p.escan*DEG)):0);
+  const Lsum=m.cfarL+m.mtiL+m.scanL; m.Lsum=Lsum;
+  m.Dbase=Dbase; m.Dx=Dbase+Lsum;
+  m.mds=10*log10(kB*m.Tsys*B)+30+m.Dx;
+  m.pdAt=R=>{
+    const s=m.snrdB(R)-Lsum; if(!isFinite(s)) return 0; let q;
+    if(bin){const pd1=pdSW0(10**((s-fluC)/10),pf1); q=tail(N,Mb,pd1);} else q=invPd(x=>base(x,pfac),s);
+    return K>1?tail(K,Mc,q):q;
+  };
+  // max range: last range where SNR >= Dx
+  const Rlo=0.5, Rhi=Math.min(3e5,isFinite(m.horizon)?m.horizon*1.02:3e5), n=900, grid=[], vals=[];
+  for(let i=0;i<n;i++){const R=Rlo*(Rhi/Rlo)**(i/(n-1)); grid.push(R); vals.push(m.snrdB(R)-m.Dx);}
+  let last=-1, first=-1; for(let i=0;i<n;i++) if(vals[i]>=0){ if(first<0) first=i; last=i; }
+  m.RmaxCapped=false;
+  if(last<0) m.Rmax=0;
+  else if(last===n-1){m.Rmax=Rhi; m.RmaxCapped=true;}
+  else { let a=grid[last],b=grid[last+1]; for(let i=0;i<40;i++){const mid=Math.sqrt(a*b); if(m.snrdB(mid)-m.Dx>=0) a=mid; else b=mid;} m.Rmax=a; }
+  m.blindNear=first>0?grid[first]:0;
+  m.gaps=false; for(let i=Math.max(first,0);i<last;i++) if(vals[i]<0){m.gaps=true;break;}
+  m.Rdet=Math.min(m.Rmax,m.Rua);
+  const R0=p.evalR; m.snrR=m.snrdB(R0); m.margin=m.snrR-m.Dx; m.PdR=m.pdAt(R0);
+  m.fb=2*R0*m.S/c; m.tau=2*R0/c;
+  m.tDec=m.beams*K*m.Tf;
+  const gate=0.5*p.accel*m.tDec**2; m.gateCells=Math.max(1,Math.ceil(2*gate/m.dR)+1);
+  const pfg=-Math.expm1(m.gateCells*Math.log1p(-Pfa));
+  const tN=Math.max(1,Math.round(p.trkN)), tM=Math.min(Math.max(1,Math.round(p.trkM)),tN); m.tN=tN; m.tM=tM;
+  m.ptrue=tail(tN,tM,m.PdR); m.pfalse=tail(tN,tM,pfg);
+  return m;
+}
+
+
+/* ---------- UI label tweaks for segmented controls ---------- */
+SMAP.gainModel.opts=[["chart","π² / (θaz·θel)"],["ideal","4π / (θaz·θel)"]];
+SMAP.surface.opts=[["none","None"],["land","Land"],["sea","Sea"]];
+SMAP.earth.opts=[["flat","Flat"],["curved","Curved (4/3)"]];
+SMAP.sw.opts=[["0","Swerling 0"],["1","Swerling 1"]];
+SMAP.integ.opts=[["coherent","Coherent"],["noncoherent","Noncoherent"]];
+SMAP.pol.opts=[["H","Horizontal"],["V","Vertical"]];
+SMAP.scan.opts=[["none","None"],["mechanical","Mechanical"],["electronic","Electronic"]];
+SMAP.sw.d="Steady target (Swerling 0) or one whose size fluctuates (Swerling 1).";
+SMAP.gainModel.l="Antenna gain formula";
+
+/* ---------- readouts: plain-language meaning + which direction is better ---------- */
+const MGROUPS=[["w","Waveform & range"],["v","Speed & timing"],["p","Power & noise"],["d","Detection"],["t","Tracking"]];
+const MD=[
+ {id:"lam",g:"w",l:"Wavelength λ",e:"Length of one wave. Shorter λ gives finer speed measurement.",dir:0,v:m=>m.lam,t:m=>fLen(m.lam),f:"c / f0"},
+ {id:"S",g:"w",l:"Chirp slope",e:"How fast the frequency climbs during one chirp.",dir:0,v:m=>m.S,t:m=>sig(m.S/1e12)+" MHz/µs",f:"B / Tc"},
+ {id:"dR",g:"w",l:"Range resolution",e:"Two targets closer than this in range look like one.",dir:-1,v:m=>m.dR,t:m=>fLen(m.dR),f:"c / (2B)"},
+ {id:"Rua",g:"w",l:"Unambiguous range",e:"Echoes from beyond this wrap around to a wrong range.",dir:1,v:m=>m.Rua,t:m=>fLen(m.Rua),f:"c / (2·PRF)"},
+ {id:"duty",g:"w",l:"Duty cycle",e:"Share of time the transmitter is on.",dir:0,v:m=>m.duty,t:m=>(m.duty*100).toFixed(1)+" %",f:"Tc · PRF",st:m=>m.prfClamped?"warn":null,n:m=>m.prfClamped?"PRF was above 1/Tc, so it is held at 1/Tc.":""},
+ {id:"fb",g:"w",l:"Beat frequency",e:"Frequency of the mixed echo from the target. Range is read from it.",dir:0,v:m=>m.fb,t:m=>fFreq(m.fb),f:"2·R·S / c",st:m=>m.fb>m.fs/2?"bad":null,n:m=>m.fb>m.fs/2?"Above fs/2, so it cannot be sampled.":""},
+ {id:"tau",g:"w",l:"Echo delay",e:"Time for the echo to return. Keep it tiny next to Tc.",dir:0,v:m=>m.tau,t:m=>fTime(m.tau),f:"2R / c",st:m=>m.tau>0.1*m.Tc?"warn":"ok",n:m=>m.tau>0.1*m.Tc?"Over 10% of Tc: eclipsing loss grows.":""},
+ {id:"fsc",g:"w",l:"Sample rate",e:"The USRP must sample at least as fast as the sweep bandwidth.",dir:0,v:m=>m.fs,t:m=>sig(m.fs/1e6,4)+" MS/s",f:"needs fs ≥ B",st:m=>m.fs<m.B?"bad":(m.fs>30.72e6?"warn":"ok"),n:m=>m.fs<m.B?"Below B. Raise fs or reduce B.":(m.fs>30.72e6?"Above 30.72 MS/s: may fail with both channels in use.":"")},
+ {id:"vb",g:"v",l:"First blind speed",e:"A target at this speed looks stationary.",dir:1,v:m=>m.vb,t:m=>sig(m.vb)+" m/s",f:"λ·PRF / 2"},
+ {id:"vua",g:"v",l:"Max speed",e:"Fastest speed measured without folding.",dir:1,v:m=>m.vua,t:m=>"± "+sig(m.vua)+" m/s",f:"λ·PRF / 4"},
+ {id:"dv",g:"v",l:"Speed resolution",e:"Two targets closer than this in speed look like one.",dir:-1,v:m=>m.dv,t:m=>sig(m.dv)+" m/s",f:"λ·PRF / (2N)"},
+ {id:"Tf",g:"v",l:"Frame time",e:"Time to collect one range–Doppler map.",dir:0,v:m=>m.Tf,t:m=>fTime(m.Tf),f:"N / PRF"},
+ {id:"tDec",g:"v",l:"Update time",e:"Time between fresh detections of the same spot.",dir:-1,v:m=>m.tDec,t:m=>fTime(m.tDec),f:"beams × CPIs × frame"},
+ {id:"upd",g:"v",l:"Update rate",e:"Fresh detections per second.",dir:1,v:m=>1/m.tDec,t:m=>fFreq(1/m.tDec),f:"1 / update time"},
+ {id:"Gt",g:"p",l:"TX antenna gain",e:"How much the TX antenna focuses power forward.",dir:1,v:m=>m.Gt,t:m=>fdB(10*log10(m.Gt),"dBi"),f:"from beamwidths"},
+ {id:"Gr",g:"p",l:"RX antenna gain",e:"How much the RX antenna focuses on the target.",dir:1,v:m=>m.Gr,t:m=>fdB(10*log10(m.Gr),"dBi"),f:"from beamwidths"},
+ {id:"eirp",g:"p",l:"EIRP",e:"Power seen in the beam direction.",dir:1,v:m=>m.eirp,t:m=>fdB(m.eirp,"dBm"),f:"Pt · Gt"},
+ {id:"pap",g:"p",l:"Power-aperture",e:"Search strength: average power × antenna area.",dir:1,v:m=>m.pap,t:m=>sig(m.pap)+" W·m²",f:"Pt·d·Ae"},
+ {id:"Ts",g:"p",l:"Noise temperature",e:"Receiver noise as a temperature. Lower is quieter.",dir:-1,v:m=>m.Tsys,t:m=>sig(m.Tsys)+" K",f:"Tref·10^(NF/10) + Tq",n:m=>m.Tq>0?"ADC quantization adds "+sig(m.Tq)+" K.":""},
+ {id:"noise",g:"p",l:"Noise power",e:"Noise inside the sweep bandwidth.",dir:-1,v:m=>m.noise,t:m=>fdB(m.noise,"dBm"),f:"k · Ts · B"},
+ {id:"mds",g:"p",l:"Weakest detectable echo",e:"Minimum detectable signal (MDS).",dir:-1,v:m=>m.mds,t:m=>fdB(m.mds,"dBm"),f:"k · Ts · B · Dx"},
+ {id:"leak",g:"p",l:"TX→RX leakage",e:"Transmit signal leaking straight into the receiver.",dir:-1,v:m=>m.leak,t:m=>fdB(m.leak,"dBm"),f:"Pt − isolation",st:m=>m.leak>-15?"bad":"ok",n:m=>m.leak>-15?"Above the −15 dBm RX limit. Add isolation or lower Pt.":""},
+ {id:"head",g:"p",l:"ADC headroom",e:"Room left before the ADC clips on leakage.",dir:1,v:m=>m.headroom,t:m=>P.quant?fdB(m.headroom):"off",f:"full scale − leakage",st:m=>P.quant?(m.headroom<0?"bad":"ok"):null,n:m=>P.quant&&m.headroom<0?"Leakage clips the ADC at this RX gain.":(P.quant?"":"Turn on quantization (Hardware) to model it.")},
+ {id:"Dx",g:"d",l:"Needed SNR (Dx)",e:"SNR per chirp needed for your Pd and Pfa.",dir:-1,v:m=>m.Dx,t:m=>fdB(m.Dx),f:"Dx(Pd,Pfa,N) + losses"},
+ {id:"snrR",g:"d",l:"SNR at target",e:"SNR one chirp gets from the target.",dir:1,v:m=>m.snrR,t:m=>fdB(m.snrR),f:"radar equation"},
+ {id:"margin",g:"d",l:"Margin",e:"Extra SNR beyond what you need. Positive is good.",dir:1,v:m=>m.margin,t:m=>fdB(m.margin),f:"SNR − Dx",st:m=>m.margin>=0?"ok":"bad"},
+ {id:"Rmax",g:"d",l:"Max detection range",e:"Farthest range where SNR still reaches Dx.",dir:1,v:m=>m.Rmax,t:m=>(m.RmaxCapped?"> ":"")+fLen(m.Rmax),f:"SNR(Rmax) = Dx",st:m=>m.Rmax>=P.gRmax?"ok":"bad",n:m=>[m.blindNear>1?"Blind below "+fLen(m.blindNear)+".":"",m.gaps?"Multipath gaps inside this range.":"",m.Rmax>m.Rua?"Beyond R_ua: echoes fold.":""].filter(Boolean).join(" ")},
+ {id:"PdR",g:"d",l:"Detection chance",e:"Probability of detecting the target.",dir:1,v:m=>m.PdR,t:m=>fPct(m.PdR),f:"Pd at target range",st:m=>m.PdR>=P.Pd?"ok":"warn"},
+ {id:"hor",g:"d",l:"Radar horizon",e:"Earth's curve hides targets beyond this.",dir:1,v:m=>m.horizon,t:m=>isFinite(m.horizon)?fLen(m.horizon):"none",f:"4.12·(√h + √h_target) km"},
+ {id:"gate",g:"t",l:"Track gate",e:"Search window for the next track update.",dir:-1,v:m=>m.gateCells,t:m=>m.gateCells+" cells",f:"½·a·T² / δR"},
+ {id:"ptrue",g:"t",l:"Real target tracked",e:"Chance a real target gets a confirmed track.",dir:1,v:m=>m.ptrue,t:m=>fPct(m.ptrue),f:"M-of-N with Pd"},
+ {id:"pfalse",g:"t",l:"Fake track",e:"Chance noise creates a false track.",dir:-1,v:m=>m.pfalse,t:m=>fPct(m.pfalse),f:"M-of-N with Pfa"}
+];
+const MDM={}; MD.forEach(d=>MDM[d.id]=d);
+
+/* ---------- state ---------- */
+const KEY="fmcw-workbench-v1";
+let P=Object.assign({},DEF);
+try{const s=JSON.parse(localStorage.getItem(KEY)||"null"); if(s) for(const k in DEF) if(k in s&&typeof s[k]===typeof DEF[k]) P[k]=s[k];}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(P));}catch(e){}}
+let M=null, BASE=null, activeTab="main";
+try{activeTab=localStorage.getItem(KEY+"-tab")||"main";}catch(e){}
+const $=id=>document.getElementById(id);
+
+/* ---------- parameter sheet ---------- */
+const rack=$("rack"), tabs=$("tabs");
+function affHTML(s){ return s.a?`<div class="aff" aria-label="Affects">${s.a.split(/\s*,\s*/).map(x=>`<span>${x}</span>`).join("")}</div>`:""; }
+function ctlHTML(s){
+  const dyn=s.x?` <span class="dyn" id="x-${s.k}"></span>`:"";
+  if(s.t==="check") return `<div class="ctl" data-k="${s.k}"><div class="row-main"><label class="name" for="c-${s.k}">${s.l}</label><span class="switch"><input type="checkbox" role="switch" id="c-${s.k}"><span></span></span></div>${s.d?`<p class="desc">${s.d}</p>`:""}${affHTML(s)}</div>`;
+  if(s.t==="select") return `<div class="ctl" data-k="${s.k}"><span class="name" id="lb-${s.k}">${s.l}</span><div class="seg" role="radiogroup" aria-labelledby="lb-${s.k}" id="c-${s.k}">${s.opts.map(o=>`<button type="button" role="radio" data-v="${o[0]}" aria-checked="false">${o[1]}</button>`).join("")}</div>${s.d?`<p class="desc">${s.d}</p>`:""}${affHTML(s)}</div>`;
+  return `<div class="ctl" data-k="${s.k}"><div class="ctl-head"><label class="name" for="c-${s.k}">${s.l}</label><span class="field"><input type="number" id="c-${s.k}" min="${s.min}" max="${s.max}" step="${s.step}" inputmode="decimal">${s.u?`<span class="u">${s.u}</span>`:""}</span></div><input type="range" id="r-${s.k}" min="${s.min}" max="${s.max}" step="${s.step}" aria-label="${s.l}">${(s.d||s.x)?`<p class="desc">${s.d||""}${dyn}</p>`:""}${affHTML(s)}</div>`;
+}
+tabs.innerHTML=GROUPS.map(g=>`<button class="tab" role="tab" type="button" data-g="${g[0]}" aria-selected="false">${g[1]}</button>`).join("");
+rack.innerHTML=GROUPS.map(g=>`<div class="grp" data-g="${g[0]}" role="tabpanel"><p class="gnote">${GNOTE[g[0]]}</p>${SPEC.filter(s=>s.g===g[0]).map(ctlHTML).join("")}</div>`).join("");
+function showTab(g){ activeTab=g; try{localStorage.setItem(KEY+"-tab",g);}catch(e){}
+  tabs.querySelectorAll(".tab").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.g===g)));
+  rack.querySelectorAll(".grp").forEach(d=>d.hidden=d.dataset.g!==g);}
+tabs.addEventListener("click",e=>{const b=e.target.closest(".tab"); if(b){showTab(b.dataset.g); b.scrollIntoView({block:"nearest",inline:"nearest"});}});
+if(!GROUPS.some(g=>g[0]===activeTab)) activeTab="main";
+showTab(activeTab);
+
+function setFill(r){ const mn=+r.min, mx=+r.max; r.style.setProperty("--p",((+r.value-mn)/(mx-mn)*100)+"%"); }
+function syncControls(){
+  for(const s of SPEC){
+    const el=$("c-"+s.k);
+    if(s.t==="check") el.checked=!!P[s.k];
+    else if(s.t==="select") el.querySelectorAll("button").forEach(b=>b.setAttribute("aria-checked",String(b.dataset.v===String(P[s.k]))));
+    else { if(document.activeElement!==el) el.value=P[s.k]; const r=$("r-"+s.k); r.value=P[s.k]; setFill(r); }
+    if(s.x){const x=$("x-"+s.k); if(x) x.textContent=s.x(P);}
+    const row=rack.querySelector(`.ctl[data-k="${s.k}"]`); if(row) row.hidden=s.show?!s.show(P):false;
+  }
+  const he=$("h-evalR"); if(document.activeElement!==he) he.value=P.evalR;
+}
+function valText(k,v){ const s=SMAP[k]; if(!s) return String(v); if(s.t==="check") return v?"on":"off";
+  if(s.t==="select"){const o=s.opts.find(o=>o[0]===v); return o?o[1]:v;} return sig(v,4)+(s.u?" "+s.u:"");}
+function setParam(k,v,live){
+  const s=SMAP[k], old=P[k];
+  if(s&&s.t!=="check"&&s.t!=="select") v=Math.min(s.max,Math.max(s.min,v));
+  if(v===old){syncControls(); return;}
+  P[k]=v; commit(`${s?s.l:k}: ${valText(k,old)} → ${valText(k,v)}`,live);
+}
+rack.addEventListener("input",e=>{const t=e.target; if(t.type==="range"){ setFill(t); setParam(t.id.slice(2),parseFloat(t.value),true);} });
+rack.addEventListener("change",e=>{const t=e.target;
+  if(t.type==="checkbox") setParam(t.id.slice(2),t.checked);
+  else if(t.type==="number"){const v=parseFloat(t.value); if(Number.isNaN(v)){syncControls();return;} setParam(t.id.slice(2),v);}
+  else if(t.type==="range") flushToast();
+});
+rack.addEventListener("click",e=>{const b=e.target.closest(".seg button"); if(!b) return; setParam(b.parentElement.id.slice(2),b.dataset.v);});
+rack.addEventListener("keydown",e=>{const b=e.target.closest(".seg button"); if(!b) return;
+  if(e.key==="ArrowRight"||e.key==="ArrowLeft"){e.preventDefault(); const bs=[...b.parentElement.children]; let i=bs.indexOf(b)+(e.key==="ArrowRight"?1:-1); i=(i+bs.length)%bs.length; bs[i].focus(); bs[i].click();}});
+$("h-evalR").addEventListener("change",e=>{const v=parseFloat(e.target.value); if(Number.isNaN(v)){syncControls();return;} setParam("evalR",v);});
+
+/* ---------- goals / fixes ---------- */
+function fixB(){const need=c/(2*P.gdR)/1e6; const v=Math.min(56,Math.max(1,Math.ceil(need*2)/2));
+  return {set:{B:v},note:need>56?`Needs ${sig(need)} MHz but the USRP stops at 56 MHz, so the best is ${fLen(c/(2*56e6))}.`:`Bandwidth set to ${v} MHz.`};}
+function fixPRF(){const prf=4*P.gvmax/M.lam, tc=1e6/prf;
+  if(P.b2b){const v=Math.min(2000,Math.max(10,Math.floor(tc/10)*10)); return {set:{Tc:v},note:tc<10?`Needs a chirp shorter than 10 µs. Lower f0 or the speed goal.`:`Chirp duration set to ${v} µs.`};}
+  const v=Math.min(100,Math.max(0.1,Math.ceil(prf/100)/10)); const set={PRF:v}; if(P.Tc>1e3/v) set.Tc=Math.max(10,Math.floor(1e3/v/10)*10);
+  return {set,note:`PRF set to ${v} kHz.`};}
+function fixN(){const need=Math.ceil(M.lam*M.PRF/(2*P.gdv)); const v=Math.min(1024,Math.max(1,need));
+  return {set:{N:v},note:need>1024?`Needs N = ${need}; capped at 1024. A longer chirp (lower PRF) helps.`:`Chirps per frame set to ${v}.`};}
+function fixTu(){const nmax=Math.floor(P.gtu/1e3*M.PRF/(M.K*M.beams)); const v=Math.min(1024,Math.max(1,nmax));
+  return {set:{N:v},note:`Chirps per frame set to ${v}. Speed resolution becomes ${sig(M.lam*M.PRF/(2*v))} m/s, because update time and speed resolution trade against each other.`};}
+function ptFor(R,label){const s=M.snrdB(R);
+  if(!isFinite(s)) return {set:{},note:`${fLen(R)} is beyond the horizon or fully eclipsed. Raise the antenna or lengthen the chirp.`};
+  const need=P.PtdBm+(M.Dx-s)+1, v=Math.min(20,Math.max(-30,Math.ceil(need*2)/2));
+  return {set:{PtdBm:v},note:need>20?`Needs ${need.toFixed(1)} dBm; capped at +20 dBm. Add antenna gain, more chirps or a longer chirp.`:`Peak power set to ${v} dBm (${fW(10**((v-30)/10))}) ${label}.`};}
+function fixPt(){return ptFor(P.gRmax,"to reach the range goal");}
+function fixPd(){return ptFor(P.evalR,"to reach the target Pd");}
+const KPIS=[
+ {id:"Rmax",l:"Max detection range",cap:"Farthest target you can detect",goal:"gRmax",cmp:"≥",u:"m",step:1,ok:m=>m.Rmax>=P.gRmax,fix:fixPt},
+ {id:"dR",l:"Range resolution",cap:"Closest two targets can be in range",goal:"gdR",cmp:"≤",u:"m",step:0.1,ok:m=>m.dR<=P.gdR*1.0001,fix:fixB},
+ {id:"vua",l:"Max speed",cap:"Fastest speed measured without folding",goal:"gvmax",cmp:"≥",u:"m/s",step:0.5,ok:m=>m.vua>=P.gvmax*0.9999,fix:fixPRF},
+ {id:"dv",l:"Speed resolution",cap:"Closest two targets can be in speed",goal:"gdv",cmp:"≤",u:"m/s",step:0.05,ok:m=>m.dv<=P.gdv*1.0001,fix:fixN},
+ {id:"tDec",l:"Update time",cap:"Time between fresh detections",goal:"gtu",cmp:"≤",u:"ms",step:1,ok:m=>m.tDec*1e3<=P.gtu*1.0001,fix:fixTu},
+ {id:"PdR",l:"Detection chance",cap:"",goal:"Pd",cmp:"≥",u:"%",step:1,ok:m=>m.PdR>=P.Pd,fix:fixPd}
+];
+const GOALDEF_LIMITS={gdR:[0.01,1000],gRmax:[1,3e5],gdv:[0.001,1000],gvmax:[0.01,1e4],gtu:[0.01,1e5]};
+$("kpis").innerHTML=KPIS.map(k=>`<div class="kpi" id="k-${k.id}"><div class="k-label">${k.l}</div><div class="k-val"></div><div class="k-cap">${k.cap}</div>
+<div class="k-goal"><span class="badge"></span><label for="gi-${k.id}">Goal ${k.cmp}</label><input type="number" id="gi-${k.id}" step="${k.step}" min="0"><span>${k.u}</span><button class="link" type="button" data-fix="${k.id}">Fix</button></div></div>`).join("");
+$("kpis").addEventListener("change",e=>{const t=e.target; if(!t.id.startsWith("gi-")) return; const k=KPIS.find(x=>"gi-"+x.id===t.id); let v=parseFloat(t.value);
+  if(!(v>0)){renderKPIs(null);return;}
+  const old=P[k.goal];
+  if(k.goal==="Pd"){v=Math.min(0.99,Math.max(0.5,v/100));} else {const L=GOALDEF_LIMITS[k.goal]; v=Math.min(L[1],Math.max(L[0],v));}
+  if(v===old){renderKPIs(null);return;} P[k.goal]=v;
+  commit(`Goal for ${k.l.toLowerCase()}: ${k.goal==="Pd"?fPct(old):sig(old)+" "+k.u} → ${k.goal==="Pd"?fPct(v):sig(v)+" "+k.u}`);});
+$("kpis").addEventListener("click",e=>{const b=e.target.closest("[data-fix]"); if(!b) return; const k=KPIS.find(x=>x.id===b.dataset.fix), r=k.fix();
+  Object.assign(P,r.set); $("fitnote").textContent=""; finish(`Fixed ${k.l.toLowerCase()}`,r.note);});
+$("fitall").addEventListener("click",()=>{
+  const prevP=Object.assign({},P), prevM=M, notes=[];
+  for(const f of [fixB,fixPRF,fixN,fixPt]){const r=f(); Object.assign(P,r.set); M=model(P); notes.push(r.note);}
+  const failing=KPIS.filter(k=>!k.ok(M)).map(k=>k.l.toLowerCase());
+  M=prevM;
+  const changed=Object.keys(P).filter(k=>P[k]!==prevP[k]);
+  finish("Fit all goals",(changed.length?changed.map(k=>`${SMAP[k].l} → ${valText(k,P[k])}`).join(" · "):"Nothing needed changing.")+" "+notes.join(" "));
+  $("fitnote").textContent=failing.length?`Still not met: ${failing.join(", ")}. These goals pull against each other, so pick which matters most.`:"All goals met.";
+});
+function splitVal(t){ const i=t.lastIndexOf(" "); if(i<0) return `${t}`; const u=t.slice(i+1); if(/^[\d.,∞−-]+$/.test(u)) return t; return `${t.slice(0,i)}<span class="unit">${u}</span>`; }
+function renderKPIs(prev){
+  for(const k of KPIS){ const el=$("k-"+k.id), d=MDM[k.id], ok=k.ok(M);
+    el.querySelector(".k-val").innerHTML=splitVal(d.t(M));
+    if(k.id==="PdR") el.querySelector(".k-cap").textContent=`Chance of seeing the target at ${fLen(P.evalR)}`;
+    const b=el.querySelector(".badge"); b.className="badge "+(ok?"ok":"bad"); b.textContent=ok?"Met":"Not met";
+    const inp=$("gi-"+k.id); if(document.activeElement!==inp) inp.value=k.goal==="Pd"?Math.round(P.Pd*100):P[k.goal];
+    el.querySelector("[data-fix]").hidden=ok;
+    if(prev&&relDiff(d.v(prev),d.v(M))>1e-6){el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");}
+  }
+  $("strip").innerHTML=KPIS.slice(0,5).concat([KPIS[5]]).map(k=>`<div class="chip">${k.l.replace("Max detection range","Max range")}<b>${MDM[k.id].t(M)}</b></div>`).join("");
+}
+
+/* ---------- readout lists ---------- */
+$("metrics").innerHTML=MGROUPS.map(g=>`<div class="list"><h4>${g[1]}</h4>${MD.filter(d=>d.g===g[0]).map(d=>`<div class="mrow" id="t-${d.id}"><div class="m-left"><div class="m-name"><i class="dot" aria-hidden="true"></i>${d.l}</div><div class="m-exp">${d.e}</div><div class="m-note"></div></div><div class="m-right"><div class="m-val"></div><div class="m-f">${d.f}</div><div class="m-base"></div></div></div>`).join("")}</div>`).join("");
+function relDiff(a,b){ if(a===b) return 0; if(!isFinite(a)||!isFinite(b)) return (isFinite(a)===isFinite(b))?0:1; const d=Math.max(Math.abs(a),Math.abs(b),1e-30); return Math.abs(a-b)/d;}
+const DBIDS=new Set(["eirp","noise","mds","leak","Dx","snrR","margin","head"]), PCTIDS=new Set(["PdR","ptrue","pfalse","duty"]);
+function deltaText(d,a,b){ if(!isFinite(a)||!isFinite(b)) return "";
+  if(DBIDS.has(d.id)){const r=b-a; return `${r>0?"+":""}${r.toFixed(1)} dB`;}
+  if(PCTIDS.has(d.id)){const r=(b-a)*100; return `${r>0?"+":""}${Math.abs(r)<0.1?r.toExponential(0):r.toFixed(1)} pts`;}
+  if(a===0) return ""; const r=(b-a)/Math.abs(a)*100; return `${r>0?"+":""}${Math.abs(r)>=100?r.toFixed(0):r.toFixed(1)}%`;}
+function renderRows(prev){
+  for(const d of MD){
+    const el=$("t-"+d.id), v=d.v(M);
+    el.querySelector(".m-val").textContent=d.t(M);
+    const st=d.st?d.st(M):null; el.classList.remove("st-ok","st-warn","st-bad"); if(st) el.classList.add("st-"+st);
+    el.querySelector(".m-note").textContent=d.n?d.n(M):"";
+    const mb=el.querySelector(".m-base");
+    if(BASE&&relDiff(BASE.v[d.id],v)>1e-6){const dt=deltaText(d,BASE.v[d.id],v); mb.textContent=`was ${BASE.t[d.id]}${dt?" ("+dt+")":""}`;} else mb.textContent="";
+    if(prev&&relDiff(d.v(prev),v)>1e-6){el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");}
+  }
+}
+
+/* ---------- what changed ---------- */
+function diffRows(prev){
+  const rows=[];
+  for(const d of MD){const a=d.v(prev), b=d.v(M), r=relDiff(a,b); if(r>1e-6){
+    let q="neutral"; if(d.dir&&isFinite(a)&&isFinite(b)) q=((b>a)===(d.dir>0))?"better":"worse"; else if(d.dir&&!isFinite(a)!==!isFinite(b)) q="neutral";
+    rows.push({d,r,a:d.t(prev),b:d.t(M),q,dt:deltaText(d,a,b),up:b>a});}}
+  rows.sort((x,y)=>(y.q!=="neutral")-(x.q!=="neutral")||y.r-x.r);
+  return rows;
+}
+function renderChanges(title,sub,prev){
+  const box=$("changes");
+  if(!prev){box.innerHTML=`<div class="sec-head" style="margin:0"><div><h3>What changed</h3><p>Change any parameter. The readouts it affects are listed here, marked better or worse.</p></div></div>`; return [];}
+  const rows=diffRows(prev);
+  const list=rows.slice(0,10).map(x=>`<div class="crow"><span class="arr ${x.q}" aria-label="${x.q}">${x.up?"▲":"▼"}</span><span>${x.d.l}</span><span class="cv">${x.a} → <b>${x.b}</b>${x.dt?` · ${x.dt}`:""}</span></div>`).join("");
+  box.innerHTML=`<div class="sec-head" style="margin-bottom:6px"><div><h3>What changed</h3></div></div><div class="ch-title">${title}</div>${sub?`<div class="ch-sub">${sub}</div>`:""}`+
+    (rows.length?`<div class="crows">${list}</div>${rows.length>10?`<div class="ch-sub" style="margin-top:8px">+${rows.length-10} more readouts moved. Changed rows flash in All readouts.</div>`:""}
+    <div class="legend-c"><span><i class="arr better" style="width:14px;height:14px;font-size:8px">▲</i>better</span><span><i class="arr worse" style="width:14px;height:14px;font-size:8px">▲</i>worse</span><span><i class="arr" style="width:14px;height:14px;font-size:8px">▲</i>neither (a trade-off)</span></div>`
+    :`<div class="ch-sub" style="margin-top:8px">No readout moved. This setting only matters when its related option is switched on.</div>`);
+  return rows;
+}
+let toastT=null, pendingToast=null;
+function showToast(title,rows){
+  const t=$("toast"); const top=rows.filter(r=>r.q!=="neutral").slice(0,2).concat(rows.filter(r=>r.q==="neutral")).slice(0,2);
+  t.innerHTML=`<b>${title}</b>`+(top.length?`<div class="t2">${top.map(r=>`${r.d.l} ${r.b} (${r.q==="better"?"better":r.q==="worse"?"worse":"changed"})`).join(" · ")}</div>`:"");
+  t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"),2600);
+}
+function flushToast(){ if(pendingToast){showToast(pendingToast.title,pendingToast.rows); pendingToast=null;} }
+
+/* ---------- charts ---------- */
+function mk(tag,attrs,text){const e=document.createElementNS(NS,tag); for(const k in attrs) e.setAttribute(k,attrs[k]); if(text!=null) e.textContent=text; return e;}
+function niceStep(x){const e=10**Math.floor(log10(x)), f=x/e; return (f<1.5?1:f<3?2:f<7?5:10)*e;}
+function linTicks(a,b,n){const st=niceStep((b-a)/(n||5)), out=[]; for(let v=Math.ceil(a/st)*st;v<=b+st*1e-9;v+=st) out.push(Math.abs(v)<st*1e-9?0:+v.toPrecision(10)); return out;}
+function logTicks(a,b){const out=[]; const dec=log10(b)-log10(a);
+  for(let d=Math.floor(log10(a));d<=Math.ceil(log10(b));d++) for(const k of [1,2,5]){const v=k*10**d; if(v>=a*0.999&&v<=b*1.001) out.push({v,major:k===1||dec<2.5});}
+  return out;}
+function frame(id,H){const el=$(id); const W=Math.max(280,Math.round(el.clientWidth||600));
+  el.innerHTML=""; const svg=mk("svg",{viewBox:`0 0 ${W} ${H}`,width:W,height:H,role:"img"}); el.appendChild(svg); return {svg,W,H};}
+function axes(f,o){
+  const {svg,W,H}=f, Mg=o.M, g=mk("g",{}); svg.appendChild(g);
+  for(const t of o.xt){const x=o.X(t.v); g.appendChild(mk("line",{x1:x,x2:x,y1:Mg.t,y2:H-Mg.b,class:"grid"}));
+    if(t.label!==false) g.appendChild(mk("text",{x,y:H-Mg.b+15,"text-anchor":"middle"},t.txt));}
+  for(const t of o.yt){const y=o.Y(t); g.appendChild(mk("line",{x1:Mg.l,x2:W-Mg.r,y1:y,y2:y,class:"grid"}));
+    g.appendChild(mk("text",{x:Mg.l-7,y:y+4,"text-anchor":"end"},o.yf(t)));}
+  g.appendChild(mk("text",{x:(Mg.l+W-Mg.r)/2,y:H-4,"text-anchor":"middle"},o.xl));
+  g.appendChild(mk("text",{x:12,y:(Mg.t+H-Mg.b)/2,"text-anchor":"middle",transform:`rotate(-90 12 ${(Mg.t+H-Mg.b)/2})`},o.yl));
+}
+function pathOf(pts){let d="",pen=false; for(const p of pts){ if(p==null||!isFinite(p[1])){pen=false;continue;} d+=(pen?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1); pen=true;} return d;}
+function logX(a,b,l,r){const la=log10(a),lb=log10(b); return v=>l+(log10(v)-la)/(lb-la)*(r-l);}
+function linS(a,b,l,r){return v=>l+(v-a)/(b-a)*(r-l);}
+function plotRange(){ return Math.min(3e5,Math.max(20,(M.Rmax||0)*1.8,P.evalR*2,P.gRmax*1.5)); }
+function drawSNR(){
+  const f=frame("ch-snr",280), Mg={l:46,r:14,t:14,b:38}, Rp=plotRange();
+  const X=logX(1,Rp,Mg.l,f.W-Mg.r), n=320, pts=[], cn=[]; let mx=-Infinity;
+  for(let i=0;i<n;i++){const R=10**(log10(Rp)*i/(n-1)); const s=M.snrdB(R); if(isFinite(s)&&s>mx) mx=s; pts.push([R,s]); if(M.cnrdB) cn.push([R,M.cnrdB(R)]);}
+  const ymin=Math.floor((M.Dx-30)/10)*10, ymax=Math.max(Math.ceil((Math.min(mx,M.Dx+110)+5)/10)*10,ymin+40);
+  const Y=linS(ymin,ymax,f.H-Mg.b,Mg.t), cl=v=>Math.min(f.H-Mg.b,Math.max(Mg.t,Y(v)));
+  axes(f,{M:Mg,X,Y,xt:logTicks(1,Rp).map(t=>({v:t.v,txt:t.major?fLen(t.v):"",label:t.major})),yt:linTicks(ymin,ymax,5),yf:v=>v,xl:"Range",yl:"SNR (dB)"});
+  if(M.Rmax>1) f.svg.appendChild(mk("rect",{x:Mg.l,y:Mg.t,width:Math.max(0,X(Math.min(M.Rmax,Rp))-Mg.l),height:f.H-Mg.b-Mg.t,class:"area"}));
+  f.svg.appendChild(mk("line",{x1:Mg.l,x2:f.W-Mg.r,y1:Y(M.Dx),y2:Y(M.Dx),class:"s-thr"}));
+  if(cn.length) f.svg.appendChild(mk("path",{d:pathOf(cn.map(p=>[X(p[0]),isFinite(p[1])&&p[1]>ymin?cl(p[1]):NaN])),class:"s-cnr"}));
+  f.svg.appendChild(mk("path",{d:pathOf(pts.map(p=>[X(p[0]),isFinite(p[1])&&p[1]>ymin-1?cl(p[1]):NaN])),class:"s-main"}));
+  const xe=X(Math.min(P.evalR,Rp)); f.svg.appendChild(mk("line",{x1:xe,x2:xe,y1:Mg.t,y2:f.H-Mg.b,class:"s-mark"}));
+  f.svg.appendChild(mk("text",{x:xe+5,y:Mg.t+12,class:"lbl"},"target "+fLen(P.evalR)));
+  f.svg.appendChild(mk("text",{x:Mg.l+6,y:Y(M.Dx)-6},"needed "+M.Dx.toFixed(1)+" dB"));
+  if(M.Rmax>1&&M.Rmax<=Rp){const xr=X(M.Rmax), yr=Y(M.Dx); f.svg.appendChild(mk("circle",{cx:xr,cy:yr,r:5,class:"pt"}));
+    f.svg.appendChild(mk("text",{x:xr-8,y:yr+18,"text-anchor":"end",class:"lbl"},"max range "+fLen(M.Rmax)));}
+  $("lg-cnr").hidden=!M.cnrdB;
+}
+function drawPd(){
+  const f=frame("ch-pd",260), Mg={l:46,r:14,t:14,b:38}, Rp=plotRange();
+  const X=logX(1,Rp,Mg.l,f.W-Mg.r), Y=linS(0,1,f.H-Mg.b,Mg.t), pts=[];
+  for(let i=0;i<150;i++){const R=10**(log10(Rp)*i/149); pts.push([X(R),Y(M.pdAt(R))]);}
+  axes(f,{M:Mg,X,Y,xt:logTicks(1,Rp).map(t=>({v:t.v,txt:t.major?fLen(t.v):"",label:t.major})),yt:[0,0.25,0.5,0.75,1],yf:v=>(v*100)+"%",xl:"Range",yl:"Pd"});
+  f.svg.appendChild(mk("line",{x1:Mg.l,x2:f.W-Mg.r,y1:Y(P.Pd),y2:Y(P.Pd),class:"s-thr"}));
+  f.svg.appendChild(mk("path",{d:pathOf(pts),class:"s-main"}));
+  const xe=X(Math.min(P.evalR,Rp)); f.svg.appendChild(mk("line",{x1:xe,x2:xe,y1:Mg.t,y2:f.H-Mg.b,class:"s-mark"}));
+  f.svg.appendChild(mk("circle",{cx:xe,cy:Y(M.PdR),r:5,class:"pt"}));
+  f.svg.appendChild(mk("text",{x:Math.min(xe+8,f.W-Mg.r-90),y:Math.max(Mg.t+12,Y(M.PdR)-9),class:"lbl"},"Pd "+fPct(M.PdR)));
+}
+function drawCov(){
+  const f=frame("ch-cov",270), Mg={l:50,r:14,t:14,b:38};
+  const Rd=Math.min(M.Rdet,M.horizon), Xc=Math.max(10,Math.max(Rd,P.evalR)*1.25), Vc=M.vua*1.35;
+  const X=linS(0,Xc,Mg.l,f.W-Mg.r), Y=linS(-Vc,Vc,f.H-Mg.b,Mg.t);
+  axes(f,{M:Mg,X,Y,xt:linTicks(0,Xc,5).map(v=>({v,txt:v===0?"0":fLen(v)})),yt:linTicks(-Vc,Vc,6),yf:v=>sig(v),xl:"Range",yl:"Speed (m/s)"});
+  const x1=X(Math.min(Rd,Xc));
+  if(Rd>0) f.svg.appendChild(mk("rect",{x:Mg.l,y:Y(M.vua),width:Math.max(0,x1-Mg.l),height:Y(-M.vua)-Y(M.vua),class:"region",rx:4}));
+  const nx=Math.min(Rd,Xc)/M.dR, ny=2*M.vua/M.dv, cells=mk("g",{});
+  if(Rd>0&&nx<=60) for(let r=M.dR;r<Math.min(Rd,Xc);r+=M.dR) cells.appendChild(mk("line",{x1:X(r),x2:X(r),y1:Y(M.vua),y2:Y(-M.vua),class:"cell"}));
+  if(Rd>0&&ny<=60) for(let v=-M.vua+M.dv;v<M.vua-1e-9;v+=M.dv) cells.appendChild(mk("line",{x1:Mg.l,x2:x1,y1:Y(v),y2:Y(v),class:"cell"}));
+  f.svg.appendChild(cells);
+  f.svg.appendChild(mk("text",{x:Mg.l+6,y:Y(M.vua)-6,class:"lbl"},"± "+sig(M.vua)+" m/s"));
+  if(M.Rua<Xc){const xu=X(M.Rua); f.svg.appendChild(mk("line",{x1:xu,x2:xu,y1:Mg.t,y2:f.H-Mg.b,class:"s-thr"})); f.svg.appendChild(mk("text",{x:xu-4,y:Mg.t+12,"text-anchor":"end"},"R_ua"));}
+  const lim=M.Rmax<=M.Rua?"limited by SNR":"limited by R_ua";
+  f.svg.appendChild(mk("text",{x:Math.max(Mg.l+70,(Mg.l+x1)/2),y:Y(0)+4,"text-anchor":"middle",class:"lbl"},Rd>0?`0 – ${fLen(Rd)}, ${lim}`:"nothing detectable"));
+  f.svg.appendChild(mk("text",{x:f.W-Mg.r-4,y:f.H-Mg.b-7,"text-anchor":"end"},`${Math.round(nx).toLocaleString("en-US")} × ${Math.round(ny).toLocaleString("en-US")} cells`));
+}
+function drawAnt(){
+  const f=frame("ch-ant",260), Mg={l:46,r:14,t:14,b:38};
+  const gt=10*log10(M.Gt), gr=10*log10(M.Gr), top=Math.ceil((Math.max(gt,gr)+3)/5)*5, bot=top-40;
+  const X=linS(-90,90,Mg.l,f.W-Mg.r), Y=linS(bot,top,f.H-Mg.b,Mg.t), tx=[], rx=[], rel=P.sepRx?P.relB:P.elB;
+  for(let a=-90;a<=90;a+=0.5){tx.push([X(a),Y(Math.max(bot,gt+patdB(a-P.tilt,P.elB)))]); rx.push([X(a),Y(Math.max(bot,gr+patdB(a-P.tilt,rel)))]);}
+  axes(f,{M:Mg,X,Y,xt:[-90,-60,-30,0,30,60,90].map(v=>({v,txt:v+"°"})),yt:linTicks(bot,top,5),yf:v=>v,xl:"Elevation angle (down ← → up)",yl:"Gain (dBi)"});
+  f.svg.appendChild(mk("path",{d:pathOf(tx),class:"s-main"}));
+  if(P.sepRx) f.svg.appendChild(mk("path",{d:pathOf(rx),class:"s-rx"}));
+  $("lg-rx").hidden=!P.sepRx;
+  const th=Math.atan2(P.ht-P.h,P.evalR)/DEG, xt=X(th), gat=gt+patdB(th-P.tilt,P.elB);
+  f.svg.appendChild(mk("line",{x1:xt,x2:xt,y1:Mg.t,y2:f.H-Mg.b,class:"s-mark"}));
+  f.svg.appendChild(mk("circle",{cx:xt,cy:Y(Math.max(bot,gat)),r:5,class:"pt"}));
+  f.svg.appendChild(mk("text",{x:xt+(th>30?-7:7),y:Mg.t+12,"text-anchor":th>30?"end":"start",class:"lbl"},`target ${th.toFixed(1)}° · ${gat.toFixed(1)} dBi`));
+  if(P.surface!=="none"){const tr=-Math.atan((P.h+P.ht)/P.evalR)/DEG, xr=X(tr);
+    f.svg.appendChild(mk("line",{x1:xr,x2:xr,y1:Mg.t+18,y2:f.H-Mg.b,class:"s-cnr"}));
+    f.svg.appendChild(mk("text",{x:xr-7,y:f.H-Mg.b-7,"text-anchor":"end"},"ground bounce"));}
+}
+function drawAll(){ drawSNR(); drawPd(); drawCov(); drawAnt(); }
+
+/* ---------- budget ---------- */
+function renderBudget(){
+  const rows=[["Starting need: one chirp, steady target",M.d0,"base"]];
+  if(P.sw==="1") rows.push(["Fluctuating target (Swerling 1)",M.flu,"loss"]);
+  rows.push([`Gain from combining ${M.N} chirps (${P.integ})`+(M.bin?`, binary ${M.Mb}-of-${M.N}`:""),-M.igain,"gain"]);
+  if(P.cfar) rows.push([`CFAR loss, ${Math.round(P.cfarCells)} cells`,M.cfarL,"loss"]);
+  if(P.mti) rows.push(["MTI loss",M.mtiL,"loss"]);
+  if(P.scan!=="none") rows.push([`Scan loss (${P.scan})`,M.scanL,"loss"]);
+  const mxv=Math.max(20,...rows.map(r=>Math.abs(r[1])),Math.abs(M.Dx),isFinite(M.snrR)?Math.abs(M.snrR):0);
+  const bar=(v,cls)=>`<div class="bbar"><i class="${cls}" style="width:${Math.min(100,Math.abs(v)/mxv*100).toFixed(1)}%"></i></div>`;
+  let h=rows.map(r=>`<div class="brow"><span>${r[0]}</span><span class="bval">${(r[2]==="base"?"":r[1]>=0?"+":"−")+Math.abs(r[1]).toFixed(1)} dB</span>${bar(r[1],r[2]==="base"?"":r[2])}</div>`).join("");
+  h+=`<div class="brow total"><span>Needed SNR (Dx)</span><span class="bval">${fdB(M.Dx)}</span>${bar(M.Dx,"loss")}</div>`;
+  h+=`<div class="brow"><span>SNR you get at ${fLen(P.evalR)}</span><span class="bval">${fdB(M.snrR)}</span>${bar(isFinite(M.snrR)?M.snrR:0,"gain")}</div>`;
+  h+=`<div class="brow total last"><span>Margin ${M.margin>=0?"(detected)":"(too weak)"}</span><span class="bval" style="color:var(${M.margin>=0?"--green":"--red"})">${fdB(M.margin)}</span>${bar(isFinite(M.margin)?M.margin:mxv,M.margin>=0?"good":"bad")}</div>`;
+  $("budget").innerHTML=h;
+  $("bnote").textContent=(M.K>1?`With ${M.Mc}-of-${M.K} CPIs, each CPI only needs Pd ${fPct(M.pdc)} and Pfa ${sci(M.pfac)}. `:"")+"Every 12 dB of extra margin doubles the max range, because Rmax grows with the fourth root of SNR.";
+}
+
+/* ---------- orchestration ---------- */
+function render(prev){ syncControls(); renderKPIs(prev); renderRows(prev); drawAll(); renderBudget(); $("pin").textContent=BASE?"Clear baseline":"Pin baseline"; }
+function finish(title,sub,live){
+  const prev=M; M=model(P); render(prev); const rows=renderChanges(title,sub,prev); save();
+  if(live){ pendingToast={title,rows}; clearTimeout(liveT); liveT=setTimeout(flushToast,350); } else showToast(title,rows);
+}
+let liveT=null;
+function commit(title,live){ $("fitnote").textContent=""; finish(title,"",live); }
+$("pin").addEventListener("click",()=>{
+  if(BASE){BASE=null; render(null); showToast("Baseline cleared",[]); return;}
+  BASE={v:{},t:{}}; for(const d of MD){BASE.v[d.id]=d.v(M); BASE.t[d.id]=d.t(M);} render(null);
+  showToast("Baseline pinned",[]);
+  $("changes").querySelector(".sec-head p")&&($("changes").querySelector(".sec-head p").textContent="Baseline pinned. Each readout in All readouts now shows its pinned value when it differs.");
+});
+$("reset").addEventListener("click",()=>{P=Object.assign({},DEF); commit("Reset to the lab defaults");});
+let rt=null; const ro=new ResizeObserver(()=>{clearTimeout(rt); rt=setTimeout(()=>{ if(M) drawAll(); },120);});
+document.querySelectorAll(".chart").forEach(el=>ro.observe(el));
+/* ---------- theme ---------- */
+function applyTheme(t){
+  if(t==="light"||t==="dark") document.documentElement.setAttribute("data-theme",t);
+  else document.documentElement.removeAttribute("data-theme");
+  document.querySelectorAll("#theme button").forEach(b=>b.setAttribute("aria-checked",String(b.dataset.t===t)));
+  try{localStorage.setItem(KEY+"-theme",t);}catch(e){}
+  if(M) drawAll();
+}
+$("theme").addEventListener("click",e=>{const b=e.target.closest("button[data-t]"); if(b) applyTheme(b.dataset.t);});
+$("theme").addEventListener("keydown",e=>{const b=e.target.closest("button[data-t]"); if(!b) return;
+  if(e.key==="ArrowRight"||e.key==="ArrowLeft"){e.preventDefault(); const bs=[...$("theme").children]; let i=bs.indexOf(b)+(e.key==="ArrowRight"?1:-1); i=(i+bs.length)%bs.length; bs[i].focus(); bs[i].click();}});
+let savedTheme="auto"; try{savedTheme=localStorage.getItem(KEY+"-theme")||"auto";}catch(e){}
+applyTheme(savedTheme);
+
+M=model(P); render(null); renderChanges(null,null,null);
+
+})();
+</script>
+</body>
+</html>
